@@ -58,30 +58,32 @@ interface AppConfig {
 const SettingsPage: React.FC = () => {
   // بارگذاری تنظیمات اولیه از فایل کانفیگ یا localStorage
   const loadSettingsFromConfig = (): SettingsGroup[] => {
-    // ابتدا تنظیمات پایه را از فایل config بارگذاری می‌کنیم
+    // بخش تنظیمات آماده
     const baseSettings = [
       {
         title: 'تنظیمات شخصی',
         settings: [
           {
             id: 'userName',
-            label: 'نام شما',
+            label: 'نام کاربر',
             type: 'text' as const,
-            value: config.default_user_name || 'مجتبی'
+            value: config.default_user_name || 'مجتبی',
+            description: 'نام شما برای نمایش در گفتگوها'
           },
           {
             id: 'assistantName',
             label: 'نام دستیار',
             type: 'text' as const,
-            value: config.default_assistant_name || 'هوشی'
+            value: config.default_assistant_name || 'هوشی',
+            description: 'نام دستیار مجازی'
           },
           {
             id: 'prioritizeMemory',
-            label: 'اولویت‌دهی به حافظه',
+            label: 'اولویت حافظه',
             type: 'toggle' as const,
-            value: config.prioritize_memory || true,
-            description: 'هوشی پیام‌های قبلی را در نظر می‌گیرد'
-          }
+            value: config.prioritize_memory || false,
+            description: 'استفاده از حافظه گفتگوهای قبلی در پاسخ‌ها'
+          },
         ]
       },
       {
@@ -232,6 +234,13 @@ const SettingsPage: React.FC = () => {
         title: 'تنظیمات پیشرفته',
         settings: [
           {
+            id: 'openai_api_key',
+            label: 'کلید API اوپن‌ای',
+            type: 'text' as const,
+            value: '',
+            description: 'کلید API اوپن‌ای برای اتصال به سرویس‌های هوش مصنوعی'
+          },
+          {
             id: 'applySettingsLive',
             label: 'اعمال تنظیمات بدون نیاز به راه‌اندازی مجدد',
             type: 'toggle' as const,
@@ -246,6 +255,24 @@ const SettingsPage: React.FC = () => {
         ]
       }
     ];
+    
+    // بررسی و بارگذاری کلید API از localStorage
+    const storedConfig = localStorage.getItem('hooshi_config');
+    if (storedConfig) {
+      try {
+        const configObj = JSON.parse(storedConfig);
+        // کلید API را در تنظیمات پیشرفته قرار می‌دهیم
+        const advancedGroup = baseSettings.find(g => g.title === 'تنظیمات پیشرفته');
+        if (advancedGroup) {
+          const apiKeySetting = advancedGroup.settings.find(s => s.id === 'openai_api_key');
+          if (apiKeySetting && configObj.api_key) {
+            apiKeySetting.value = configObj.api_key;
+          }
+        }
+      } catch (error) {
+        console.error('خطا در بارگذاری کانفیگ:', error);
+      }
+    }
     
     // سپس تنظیمات ذخیره شده در localStorage را بررسی می‌کنیم
     const storedSettings = localStorage.getItem('hooshi_settings');
@@ -428,10 +455,14 @@ const SettingsPage: React.FC = () => {
     
     // ذخیره خودکار تنظیمات هنگام تغییر مقادیر
     const settingsValues: any = {};
+    const configValues: any = {};
     
     newSettings.forEach(group => {
       group.settings.forEach(setting => {
-        if (setting.type === 'group') {
+        if (group.title === 'تنظیمات پیشرفته' && setting.id === 'openai_api_key') {
+          // کلید API را در کانفیگ ذخیره می‌کنیم
+          configValues.api_key = setting.value;
+        } else if (setting.type === 'group') {
           setting.children?.forEach(child => {
             settingsValues[child.id] = child.value;
           });
@@ -447,6 +478,14 @@ const SettingsPage: React.FC = () => {
     
     // ذخیره در localStorage
     localStorage.setItem('hooshi_settings', JSON.stringify(settingsValues));
+    
+    // ذخیره کانفیگ در localStorage (اگر تغییر کرده باشد)
+    if (Object.keys(configValues).length > 0) {
+      // ترکیب با مقادیر موجود
+      const existingConfig = JSON.parse(localStorage.getItem('hooshi_config') || '{}');
+      const newConfig = { ...existingConfig, ...configValues };
+      localStorage.setItem('hooshi_config', JSON.stringify(newConfig));
+    }
     
     // ذخیره در IndexedDB
     dbService.saveSettings(settingsValues)
@@ -465,10 +504,14 @@ const SettingsPage: React.FC = () => {
     try {
       // جمع‌آوری مقادیر از تنظیمات
       const settingsValues: any = {};
+      const configValues: any = {};
       
       settings.forEach(group => {
         group.settings.forEach(setting => {
-          if (setting.type === 'group') {
+          if (group.title === 'تنظیمات پیشرفته' && setting.id === 'openai_api_key') {
+            // کلید API را در کانفیگ ذخیره می‌کنیم
+            configValues.api_key = setting.value;
+          } else if (setting.type === 'group') {
             setting.children?.forEach(child => {
               settingsValues[child.id] = child.value;
             });
@@ -482,8 +525,16 @@ const SettingsPage: React.FC = () => {
       settingsValues.theme = theme;
       settingsValues.fontSize = fontSize;
       
-      // ذخیره در localStorage
+      // ذخیره تنظیمات در localStorage
       localStorage.setItem('hooshi_settings', JSON.stringify(settingsValues));
+      
+      // ذخیره کانفیگ در localStorage (اگر تغییر کرده باشد)
+      if (Object.keys(configValues).length > 0) {
+        // ترکیب با مقادیر موجود
+        const existingConfig = JSON.parse(localStorage.getItem('hooshi_config') || '{}');
+        const newConfig = { ...existingConfig, ...configValues };
+        localStorage.setItem('hooshi_config', JSON.stringify(newConfig));
+      }
       
       // ذخیره در IndexedDB
       dbService.saveSettings(settingsValues)
@@ -501,7 +552,7 @@ const SettingsPage: React.FC = () => {
       applyAppearanceSettings();
     } catch (error) {
       console.error('خطا در ذخیره تنظیمات:', error);
-      setSaveError('خطا در ذخیره تنظیمات. لطفاً دوباره تلاش کنید.');
+      setSaveError('خطا در ذخیره تنظیمات');
       setTimeout(() => setSaveError(null), 3000);
     }
   };
